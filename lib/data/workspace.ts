@@ -3,6 +3,7 @@ import { listProspects } from "./prospects";
 import type { Workspace } from "@/lib/types";
 export async function loadWorkspace(): Promise<Workspace> {
   const db = await createClient();
+  const { data: { user } } = await db.auth.getUser();
   const [prospects, interactions, profiles, strategies, audit] = await Promise.all([
     listProspects(),
     db.from("interactions").select("*").order("created_at", { ascending: false }),
@@ -11,6 +12,6 @@ export async function loadWorkspace(): Promise<Workspace> {
     db.from("audit_logs").select("*").order("created_at", { ascending: false }).limit(100),
   ]);
   for (const result of [interactions, profiles, strategies, audit]) if (result.error) throw new Error(result.error.message);
-  return { prospects, interactions: interactions.data ?? [], profiles: profiles.data ?? [], strategies: strategies.data ?? [], audit: audit.data ?? [], aiEnabled: !!process.env.OPENAI_API_KEY };
+  return { prospects, interactions: interactions.data ?? [], profiles: profiles.data ?? [], strategies: strategies.data ?? [], audit: audit.data ?? [], aiEnabled: !!process.env.OPENAI_API_KEY, user: user ? { id: user.id, email: user.email ?? "Consultant", role: user.app_metadata?.role ?? "consultant" } : null };
 }
 

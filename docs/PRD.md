@@ -13,13 +13,13 @@ Sales Consultants at AIRA Residence (luxury condo, KL) have no tool to tailor th
 - **Strategies** — tailored pitch + closing approach per prospect.
 
 ## MVP (v1) Checklist
-- [ ] Add/edit/delete a prospect with lead data
-- [ ] Log interaction observations after each meeting
-- [ ] Generate a behavioral profile from prospect + interaction data (AI, with review status)
-- [ ] Generate a tailored strategy: pitch angle, key talking points, closing technique, cultural considerations
-- [ ] View prospect list with status and latest profile summary
-- [ ] All CRUD persists to DB; UI reflects changes live
-- [ ] Works without login (demo-first with seed data)
+- [x] Add/edit/delete a prospect with lead data
+- [x] Log interaction observations after each meeting
+- [x] Generate a behavioral profile from prospect + interaction data (AI, with review status)
+- [x] Generate a tailored strategy: pitch angle, key talking points, closing technique, cultural considerations
+- [x] View prospect list with status and latest profile summary
+- [x] All CRUD persists to DB; UI reflects changes live
+- [x] Works without login (demo-first with seed data)
 
 ## Non-goals (v1)
 - Social media/press scraping automation
@@ -29,3 +29,4 @@ Sales Consultants at AIRA Residence (luxury condo, KL) have no tool to tailor th
 
 ## Success Scenario
 Consultant creates a prospect (Mainland Chinese, investor), logs two interaction notes (risk-averse, family-oriented). Clicks "Generate Profile" — gets a behavioral analysis with confidence scores. Clicks "Generate Strategy" — gets a pitch angle (capital preservation + legacy), three talking points, a closing technique (soft, relationship-first), and cultural notes. Consultant uses it in the next meeting and marks the prospect status as "Negotiating."
+

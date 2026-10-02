@@ -34,10 +34,17 @@ try {
  assert.ok(workspace.audit.some(a => a.action === "generate_profile" && a.target_id === profile.id));
  assert.ok(workspace.audit.some(a => a.action === "generate_strategy" && a.target_id === strategy.id));
  assert.ok(workspace.audit.some(a => a.action === "prospect_status_changed" && a.target_id === prospectId));
+ const suggestion = await action({ action: "suggest_status", id: prospectId });
+ assert.equal(suggestion.status, "negotiating");
+ await action({ action: "save_profile", id: profile.id, prospect_id: prospectId, values: profile }, 400);
+ const edited = await action({ action: "save_profile", id: profile.id, prospect_id: prospectId, values: { ...profile, summary: profile.summary + " Consultant review complete." }, confirm_approved_edit: true });
+ assert.equal(edited.review_status, "unreviewed");
+ await action({ action: "generate_strategy", id: prospectId }, 400);
+ await action({ action: "review_profile", id: profile.id, review_status: "approved" });
  await action({ action: "delete_prospect", id: prospectId }, 400);
  const response = await fetch(base + "/api/actions", { method: "POST", headers: { "Content-Type": "application/json", Origin: "https://untrusted.example" }, body: JSON.stringify({ action: "delete_prospect", id: prospectId, confirm: true }) });
  assert.equal(response.status, 403);
- console.log("PASS: persisted prospect → two notes → reviewed profile (70%) → strategy (66.5%) → Negotiating, audit, prerequisites, delete confirmation and origin checks.");
+ console.log("PASS: persisted prospect → two notes → reviewed profile (70%) → strategy (66.5%) → Negotiating, audit, status suggestions, protected edits, prerequisites, delete confirmation and origin checks.");
 } finally {
  if (prospectId) {
   await action({ action: "delete_prospect", id: prospectId, confirm: true });

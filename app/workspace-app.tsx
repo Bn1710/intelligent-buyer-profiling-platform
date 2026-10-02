@@ -69,6 +69,7 @@ export default function WorkspaceApp() {
  const [query, setQuery] = useState("");
  const [filter, setFilter] = useState("all");
  const [mobileNav, setMobileNav] = useState(false);
+ const [authMode, setAuthMode] = useState<"login" | "signup" | null>(null);
  const load = useCallback(async () => {
   const response = await fetch("/api/workspace", { cache: "no-store" });
   const body = await response.json();
@@ -76,6 +77,21 @@ export default function WorkspaceApp() {
   setData(body); setLoadError("");
  }, []);
  useEffect(() => { load().catch(e => setLoadError(e.message)); }, [load]);
+ useEffect(() => {
+  if (new URLSearchParams(window.location.search).has("auth_error")) setError("Email confirmation could not be completed. Try signing in or request a new confirmation email.");
+  const refresh = () => { if (!document.hidden) load().catch(e => setLoadError(e.message)); };
+  window.addEventListener("focus",refresh);
+  return () => window.removeEventListener("focus",refresh);
+ }, [load]);
+ async function authenticate(action: "login" | "signup" | "logout", values?: Record<string, FormDataEntryValue>) {
+  setBusy(true); setError(""); setNotice("");
+  try {
+   const response = await fetch("/api/auth", { method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action,...values}) });
+   const body = await response.json(); if (!response.ok) throw new Error(body.error);
+   setSelected(null); await load(); setAuthMode(null); setNotice(body.message);
+  } catch(e) { setError(e instanceof Error ? e.message : "Authentication unavailable."); }
+  finally { setBusy(false); }
+ }
  async function command(payload: Record<string, unknown>, success: string) {
   if (busy) return;
   setBusy(true); setError(""); setNotice("");
@@ -138,14 +154,14 @@ export default function WorkspaceApp() {
    <div className="workspace-label">CONSULTANT WORKSPACE</div>
    <nav aria-label="Main navigation">{(["Prospects","Interactions","Profiles","Strategies"] as Section[]).map((item,i) => <button key={item} className={section === item ? "nav-item active" : "nav-item"} onClick={() => { setSection(item); setSelected(null); setMobileNav(false); }}><span className="nav-icon">{["◈","◷","◇","↗"][i]}</span>{item}<span className="nav-count">{data ? [data.prospects.length,data.interactions.length,data.profiles.length,data.strategies.length][i] : "—"}</span></button>)}</nav>
    <div className="sidebar-note"><span className="eyebrow">A MORE PERSONAL APPROACH</span><p>Understand the person.<br/>Shape the conversation.</p><span className="small">Built around your observations.</span></div>
-   <div className="sidebar-footer"><span className="avatar small-avatar">SC</span><div>Sales consultant<span className="small block">Shared demo workspace</span></div></div>
+   <div className="sidebar-footer"><span className="avatar small-avatar">SC</span><div>Sales consultant<span className="small block">{data?.user ? data.user.email : "Shared demo workspace"}</span></div></div>
   </aside>
   <div className="main">
-   <header className="topbar"><div><button className="mobile-menu icon-button" aria-label="Toggle navigation" aria-expanded={mobileNav} onClick={() => setMobileNav(!mobileNav)}>☰</button><span className="breadcrumb">Workspace <span>/</span> {section}{prospect ? " / " + prospect.name : ""}</span></div><span className="demo-indicator"><i/>Demo mode · sample data only</span></header>
+   <header className="topbar"><div><button className="mobile-menu icon-button" aria-label="Toggle navigation" aria-expanded={mobileNav} onClick={() => setMobileNav(!mobileNav)}>☰</button><span className="breadcrumb">Workspace <span>/</span> {section}{prospect ? " / " + prospect.name : ""}</span></div><div className="account-controls"><span className="demo-indicator"><i/>{data?.user ? "Private workspace" : "Demo mode · sample data only"}</span>{data?.user ? <button className="account-button" disabled={busy} onClick={()=>authenticate("logout")}>Sign out</button> : <button className="account-button" disabled={busy} onClick={()=>{setError("");setAuthMode("login");}}>Sign in</button>}</div></header>
    <main className="content">
     <div className="page-heading"><div><span className="eyebrow">{prospect ? "PROSPECT WORKSPACE" : "RELATIONSHIPS, WITH CONTEXT"}</span><h1>{prospect?.name ?? section}</h1><p>{prospect ? "Turn observations into a thoughtful next conversation." : section === "Prospects" ? "Every great conversation starts with understanding." : "Your " + section.toLowerCase() + ", connected to each prospect."}</p></div><button className="primary" disabled={busy || !data} onClick={() => openEditor({ kind: "prospect" })}><span>＋</span> New Prospect</button></div>
     {notice && <div className="notice" role="status">{notice}<button aria-label="Dismiss message" onClick={() => setNotice("")}>×</button></div>}
-    {error && !editor && <div className="error" role="alert">{error}</div>}
+    {error && !editor && !authMode && <div className="error" role="alert">{error}</div>}
     {loadError ? <div className="empty-state"><span className="empty-symbol">↻</span><h2>Workspace unavailable</h2><p>{loadError}</p><button className="primary" onClick={() => load().catch(e => setLoadError(e.message))}>Retry</button></div> : !data ? <div className="skeleton" role="status"><div/><div/><div/><p>Loading your prospects…</p></div> : prospect ? <>
      <button className="back-link" onClick={() => setSelected(null)}>← Back to {section.toLowerCase()}</button>
      <div className="detail-overview"><div className="avatar">{prospect.name.split(" ").map(x=>x[0]).slice(0,2).join("")}</div><div className="detail-info"><Badge value={prospect.status}/><p>{prospect.contact_info || "No contact recorded"} · {prospect.cultural_background || "Background not recorded"}</p><span>Budget {prospect.budget_range || "not recorded"} · {label(prospect.source ?? "unknown source")}</span></div><div className="detail-actions"><button className="secondary" disabled={busy} onClick={() => openEditor({ kind: "prospect", id: prospect.id, values: prospect as unknown as Record<string,unknown> })}>Edit prospect</button><button className="danger-link" disabled={busy} onClick={() => askDelete("prospect",prospect.id,prospect.name)}>Delete</button></div></div>
@@ -172,12 +188,14 @@ export default function WorkspaceApp() {
      </section> : <section className="panel"><div className="panel-heading"><div><h2>{section}</h2><p className="small muted">Select a record to open its prospect and continue working.</p></div></div><div className="collection">{(section === "Interactions" ? data.interactions : section === "Profiles" ? data.profiles : data.strategies).map(record => { const p = data.prospects.find(p=>p.id === record.prospect_id); return <button className="collection-card" key={record.id} onClick={()=>setSelected(record.prospect_id)}><span className="eyebrow">{p?.name ?? "Prospect"}</span><strong>{"summary" in record ? record.summary : "pitch_angle" in record ? record.pitch_angle : label(record.interaction_type) + " · " + record.personality_observations}</strong><span>{"review_status" in record ? label(record.review_status) + " · " + confidence(record.confidence) : record.consultant_name}</span><time>{date(record.created_at)}</time></button>; })}</div>{!(section === "Interactions" ? data.interactions : section === "Profiles" ? data.profiles : data.strategies).length && <div className="empty-state"><h2>No {section.toLowerCase()} yet</h2><p>Open a prospect to {section === "Interactions" ? "log a conversation" : section === "Profiles" ? "generate or enter a profile" : "prepare a strategy from an approved profile"}.</p><button className="secondary" onClick={()=>setSection("Prospects")}>View prospects</button></div>}</section>}
      <div className="bottom-note"><span>✧</span><p>From first impression to next conversation.<br/><strong>Log observations → review a profile → prepare a strategy.</strong></p></div>
     </>}
-   </main><footer className="footer">AIRA Residence · Consultant workspace<span>Demo data only · Kuala Lumpur time</span></footer>
+   </main><footer className="footer">AIRA Residence · Consultant workspace<span>{data?.user ? "Private records" : "Demo data only"} · Kuala Lumpur time</span></footer>
   </div>
   {editor && <Modal title={(editor.id ? "Edit " : "New ") + label(editor.kind)} close={()=>setEditor(null)} busy={busy}><form onSubmit={submit}><div className="form-grid">{fields.map(f=><label className={"field " + (f.multiline ? "full" : "")} key={f.name}>{f.label}{f.options ? <select name={f.name} defaultValue={String(formValues[f.name] ?? f.options[0])}>{f.options.map(o=><option key={o} value={o}>{label(o)}</option>)}</select> : f.multiline ? <textarea name={f.name} required={f.required} maxLength={5000} rows={3} defaultValue={lines(formValues[f.name])} placeholder={f.placeholder}/> : <input name={f.name} required={f.required} maxLength={f.name === "name" ? 120 : 5000} defaultValue={lines(formValues[f.name])} placeholder={f.placeholder}/>}</label>)}</div>{editor.kind === "profile" && <p className="small muted">Manual profiles record 0% confidence until evidence-based generation. Editing returns the record to unreviewed.</p>}{error && <p className="error" role="alert">{error}</p>}<div className="modal-actions"><button type="button" className="secondary" disabled={busy} onClick={()=>setEditor(null)}>Cancel</button><button type="submit" className="primary" disabled={busy}>{busy ? "Saving…" : "Save " + editor.kind}</button></div></form></Modal>}
+  {authMode && <Modal title={authMode === "login" ? "Private consultant workspace" : "Create consultant account"} close={()=>setAuthMode(null)} busy={busy}><p className="confirm-description">Sign in before entering real prospect information. Your records are private to your account; the public demo stays separate.</p><form onSubmit={event=>{event.preventDefault(); authenticate(authMode,Object.fromEntries(new FormData(event.currentTarget)));}}><div className="form-grid auth-fields"><label className="field full">Email<input name="email" type="email" autoComplete="email" required maxLength={254}/></label><label className="field full">Password<input name="password" type="password" autoComplete={authMode === "login" ? "current-password" : "new-password"} minLength={8} maxLength={128} required/></label></div>{error && <p className="error" role="alert">{error}</p>}<div className="modal-actions"><button className="text-button" type="button" disabled={busy} onClick={()=>{setError("");setAuthMode(authMode === "login" ? "signup" : "login");}}>{authMode === "login" ? "Create an account" : "I already have an account"}</button><button className="primary" disabled={busy}>{busy ? "Working…" : authMode === "login" ? "Sign in" : "Create account"}</button></div></form></Modal>}
   {confirm && <Modal title={confirm.title} close={()=>setConfirm(null)} busy={busy}><p className="confirm-description">{confirm.description}</p>{error && <p className="error" role="alert">{error}</p>}<div className="modal-actions"><button className="secondary" disabled={busy} onClick={()=>setConfirm(null)}>Cancel</button><button className={confirm.title.startsWith("Delete") ? "danger" : "primary"} disabled={busy} onClick={async()=>{ try { await confirm.run(); setConfirm(null); } catch {} }}>{busy ? "Working…" : confirm.title.startsWith("Delete") ? "Delete permanently" : confirm.title.startsWith("Apply") ? "Apply status" : "Continue editing"}</button></div></Modal>}
  </div>;
 }
+
 
 
 
