@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "test:core": "node scripts/verify-core.mjs"
+    "test:core": "node scripts/verify-core.mjs",
+    "test": "node --require ./scripts/register-typescript.cjs --test scripts/intelligence.test.cjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.5.0",

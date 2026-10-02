@@ -48,8 +48,9 @@ export async function POST(request: NextRequest) {
         const id = body.id ? idSchema.parse(body.id) : undefined;
         let profileId: string | undefined;
         if (id) {
-          const { data: original } = await db.from(table).select("prospect_id").eq("id", id).single();
+          const { data: original } = await db.from(table).select("prospect_id, review_status").eq("id", id).single();
           if (original?.prospect_id !== prospect.id) throw new Error("Record does not belong to this prospect.");
+          if (original.review_status === "approved" && body.confirm_approved_edit !== true) throw new Error("Confirm editing the approved record first.");
         } else if (!profile) {
           const { data: approved } = await db.from("prospect_profiles").select("id").eq("prospect_id", prospect.id).eq("review_status", "approved").order("created_at", { ascending: false }).limit(1).maybeSingle();
           if (!approved) throw new Error("Approve a profile first."); profileId = approved.id;

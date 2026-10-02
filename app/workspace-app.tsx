@@ -1,10 +1,11 @@
 "use client";
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
-import { statuses, sources, cultures, type Workspace, type Prospect, type Interaction, type Profile, type Strategy } from "@/lib/types";
+import { statuses, sources, cultures, type Workspace, type Prospect, type Profile, type Strategy } from "@/lib/types";
+import Link from "next/link";
 
 type Section = "Prospects" | "Interactions" | "Profiles" | "Strategies";
 type Field = { name: string; label: string; options?: readonly string[]; multiline?: boolean; required?: boolean; placeholder?: string };
-type Editor = { kind: "prospect" | "interaction" | "profile" | "strategy"; id?: string; prospectId?: string; values?: Record<string, unknown> };
+type Editor = { kind: "prospect" | "interaction" | "profile" | "strategy"; id?: string; prospectId?: string; values?: Record<string, unknown>; approvedEdit?: boolean };
 type Confirm = { title: string; description: string; run: () => Promise<void> };
 const prospectFields: Field[] = [
  { name: "name", label: "Prospect name", required: true, placeholder: "e.g. Lim Wei" },
@@ -98,7 +99,7 @@ export default function WorkspaceApp() {
   }
   if (editor.kind === "strategy") values.talking_points = String(values.talking_points).split("\n").map(x => x.trim()).filter(Boolean);
   try {
-   const result = await command({ action: "save_" + editor.kind, id: editor.id, prospect_id: editor.prospectId, values }, label(editor.kind) + " saved.");
+   const result = await command({ action: "save_" + editor.kind, id: editor.id, prospect_id: editor.prospectId, confirm_approved_edit: editor.approvedEdit === true, values }, label(editor.kind) + " saved.");
    if (editor.kind === "prospect" && result?.id) setSelected(result.id);
    setEditor(null);
   } catch { /* Keep the form and user inputs open. */ }
@@ -108,7 +109,7 @@ export default function WorkspaceApp() {
    run: async () => { await command({ action: "delete_" + kind, id, confirm: true }, label(kind) + " deleted."); if (kind === "prospect") setSelected(null); } });
  }
  function editAnalysis(kind: "profile" | "strategy", record: Profile | Strategy) {
-  const next = { kind, id: record.id, prospectId: record.prospect_id, values: record as unknown as Record<string, unknown> };
+  const next = { kind, id: record.id, prospectId: record.prospect_id, values: record as unknown as Record<string, unknown>, approvedEdit: record.review_status === "approved" };
   if (record.review_status === "approved") setConfirm({ title: "Edit approved " + kind + "?", description: "Saving changes will return this record to unreviewed. Review and approve the edited version before using it.",
    run: async () => { openEditor(next); } });
   else openEditor(next);
@@ -123,7 +124,7 @@ export default function WorkspaceApp() {
  const filtered = data?.prospects.filter(p => (!query || [p.name,p.contact_info,p.budget_range,p.cultural_background].join(" ").toLowerCase().includes(query.toLowerCase())) && (filter === "all" || p.status === filter)).sort((a,b) => score(b,data) - score(a,data) || b.created_at.localeCompare(a.created_at)) ?? [];
  return <div className="app-shell">
   <aside className={"sidebar " + (mobileNav ? "sidebar-open" : "")}>
-   <a className="brand" href="/" aria-label="AIRA home"><span className="brand-mark">A</span><span>AIRA<span className="brand-sub">RESIDENCE · KL</span></span></a>
+   <Link className="brand" href="/" aria-label="AIRA home"><span className="brand-mark">A</span><span>AIRA<span className="brand-sub">RESIDENCE · KL</span></span></Link>
    <div className="workspace-label">CONSULTANT WORKSPACE</div>
    <nav aria-label="Main navigation">{(["Prospects","Interactions","Profiles","Strategies"] as Section[]).map((item,i) => <button key={item} className={section === item ? "nav-item active" : "nav-item"} onClick={() => { setSection(item); setSelected(null); setMobileNav(false); }}><span className="nav-icon">{["◈","◷","◇","↗"][i]}</span>{item}<span className="nav-count">{data ? [data.prospects.length,data.interactions.length,data.profiles.length,data.strategies.length][i] : "—"}</span></button>)}</nav>
    <div className="sidebar-note"><span className="eyebrow">A MORE PERSONAL APPROACH</span><p>Understand the person.<br/>Shape the conversation.</p><span className="small">Built around your observations.</span></div>
@@ -151,7 +152,7 @@ export default function WorkspaceApp() {
       <section className="panel"><div className="panel-heading"><div><span className="eyebrow">03 · CONNECT</span><h2>Conversation strategies</h2></div><button className="primary" disabled={busy || !approved} title={!approved ? "Approve a profile first." : "Generate from the latest approved profile."} onClick={() => command({ action: "generate_strategy", id: prospect.id }, "Strategy saved. Review it before your next meeting.").catch(()=>{})}>{busy ? "Working…" : "↗ Generate Strategy"}</button></div>
        <button className="text-button" disabled={busy || !approved} onClick={() => openEditor({ kind: "strategy", prospectId: prospect.id })}>Enter strategy manually</button>
        {!approved && <p className="inline-empty">Approve a profile first.</p>}
-       {!strategies.length ? <p className="inline-empty">A pitch that reflects the prospect's priorities, with a thoughtful way forward.</p> : strategies.map(s => <article className="analysis strategy" key={s.id}><Attribution record={s}/><span className="eyebrow">PITCH ANGLE</span><h3>{s.pitch_angle}</h3><Dimension title="Key talking points" values={s.talking_points ?? []}/><Dimension title="Closing technique" values={[s.closing_technique]}/><Dimension title="Cultural considerations" values={[s.cultural_considerations]}/>{!profiles.some(p=>p.id === s.profile_id && p.review_status === "approved") && <p className="error">The source profile is no longer approved. Review a profile and regenerate this strategy.</p>}<div className="record-actions"><button className="approve" disabled={busy || s.review_status === "approved"} onClick={() => command({ action: "review_strategy", id: s.id, review_status: "approved" }, "Strategy approved.").catch(()=>{})}>Approve strategy</button><button disabled={busy || s.review_status === "rejected"} onClick={() => command({ action: "review_strategy", id: s.id, review_status: "rejected" }, "Strategy rejected.").catch(()=>{})}>Reject</button><button disabled={busy} onClick={() => editAnalysis("strategy",s)}>Edit strategy</button><button disabled={busy} onClick={() => askDelete("strategy",s.id,prospect.name)}>Delete</button></div></article>)}
+       {!strategies.length ? <p className="inline-empty">A pitch that reflects the prospect’s priorities, with a thoughtful way forward.</p> : strategies.map(s => <article className="analysis strategy" key={s.id}><Attribution record={s}/><span className="eyebrow">PITCH ANGLE</span><h3>{s.pitch_angle}</h3><Dimension title="Key talking points" values={s.talking_points ?? []}/><Dimension title="Closing technique" values={[s.closing_technique]}/><Dimension title="Cultural considerations" values={[s.cultural_considerations]}/>{!profiles.some(p=>p.id === s.profile_id && p.review_status === "approved") && <p className="error">The source profile is no longer approved. Review a profile and regenerate this strategy.</p>}<div className="record-actions"><button className="approve" disabled={busy || s.review_status === "approved"} onClick={() => command({ action: "review_strategy", id: s.id, review_status: "approved" }, "Strategy approved.").catch(()=>{})}>Approve strategy</button><button disabled={busy || s.review_status === "rejected"} onClick={() => command({ action: "review_strategy", id: s.id, review_status: "rejected" }, "Strategy rejected.").catch(()=>{})}>Reject</button><button disabled={busy} onClick={() => editAnalysis("strategy",s)}>Edit strategy</button><button disabled={busy} onClick={() => askDelete("strategy",s.id,prospect.name)}>Delete</button></div></article>)}
       </section>
      </div><aside className="detail-side"><section className="panel"><span className="eyebrow">NEXT STEP</span><h2>Move the relationship forward</h2><p className="muted">After your next conversation, keep the pipeline current.</p><label className="field">Prospect status<select value={prospect.status} disabled={busy} onChange={e => command({ action: "save_prospect", id: prospect.id, values: { ...prospect, contact_info: prospect.contact_info ?? "", budget_range: prospect.budget_range ?? "", status: e.target.value } }, "Prospect status updated.").catch(()=>{})}>{statuses.map(s=><option key={s} value={s}>{label(s)}</option>)}</select></label><p className="small muted">Changes are saved immediately.</p></section><section className="panel guidance"><span className="eyebrow">CONSULTANT REVIEW</span><h3>Evidence before assumptions.</h3><p>Confidence reflects the number of recorded interactions, not predictive accuracy. Review every draft. Ask about preferences directly.</p>{!data.aiEnabled && <p>AI is not configured. Generation creates an editable evidence-based draft; manual entry remains available.</p>}</section><section className="panel"><span className="eyebrow">ACTIVITY LOG</span><div className="audit">{data.audit.filter(a=>a.target_id === prospect.id || profiles.some(p=>p.id === a.target_id) || strategies.some(s=>s.id === a.target_id) || interactions.some(i=>i.id === a.target_id)).slice(0,12).map(a=><div key={a.id}><strong>{label(a.action)}</strong><span>{date(a.created_at)}</span></div>)}<p className="small muted">Saved changes retain an append-only audit trail.</p></div></section></aside></div>
     </> : <>
@@ -167,4 +168,5 @@ export default function WorkspaceApp() {
   {confirm && <Modal title={confirm.title} close={()=>setConfirm(null)} busy={busy}><p className="confirm-description">{confirm.description}</p>{error && <p className="error" role="alert">{error}</p>}<div className="modal-actions"><button className="secondary" disabled={busy} onClick={()=>setConfirm(null)}>Cancel</button><button className={confirm.title.startsWith("Delete") ? "danger" : "primary"} disabled={busy} onClick={async()=>{ try { await confirm.run(); setConfirm(null); } catch {} }}>{busy ? "Working…" : confirm.title.startsWith("Delete") ? "Delete permanently" : "Continue editing"}</button></div></Modal>}
  </div>;
 }
+
 
