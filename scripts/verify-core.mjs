@@ -41,10 +41,38 @@ try {
  assert.equal(edited.review_status, "unreviewed");
  await action({ action: "generate_strategy", id: prospectId }, 400);
  await action({ action: "review_profile", id: profile.id, review_status: "approved" });
+ // Exercise individual CRUD and manual entry, not only the generated happy path.
+ const noteValues = { prospect_id: prospectId, consultant_name: "Test Consultant", interaction_type: "call", personality_observations: "Asked for a cost breakdown", intentions: "", objections: "", lifestyle_notes: "", mood_after: "neutral" };
+ const extraNote = await action({ action: "save_interaction", values: noteValues });
+ const updatedNote = await action({ action: "save_interaction", id: extraNote.id, values: { ...noteValues, objections: "Recurring fees" } });
+ assert.equal(updatedNote.objections, "Recurring fees");
+ await action({ action: "delete_interaction", id: extraNote.id }, 400);
+ await action({ action: "delete_interaction", id: extraNote.id, confirm: true });
+ const manualProfile = await action({ action: "save_profile", prospect_id: prospectId, values: { ...profile, summary: "Manually reviewed evidence from the two meetings." } });
+ assert.equal(manualProfile.source, "consultant-manual");
+ assert.equal(Number(manualProfile.confidence), 0);
+ await action({ action: "review_profile", id: manualProfile.id, review_status: "approved" });
+ const manualStrategy = await action({ action: "save_strategy", prospect_id: prospectId, values: strategy });
+ assert.equal(manualStrategy.source, "consultant-manual");
+ await action({ action: "review_strategy", id: manualStrategy.id, review_status: "approved" });
+ await action({ action: "save_strategy", id: manualStrategy.id, prospect_id: prospectId, values: strategy }, 400);
+ const editedStrategy = await action({ action: "save_strategy", id: manualStrategy.id, prospect_id: prospectId, values: { ...strategy, pitch_angle: "Discuss the verified cost breakdown first." }, confirm_approved_edit: true });
+ assert.equal(editedStrategy.review_status, "unreviewed");
+ await action({ action: "delete_strategy", id: manualStrategy.id }, 400);
+ await action({ action: "delete_strategy", id: manualStrategy.id, confirm: true });
+ await action({ action: "delete_profile", id: manualProfile.id }, 400);
+ await action({ action: "delete_profile", id: manualProfile.id, confirm: true });
+ await action({ action: "delete_profile", id: profile.id, confirm: true });
+ await action({ action: "review_strategy", id: strategy.id, review_status: "approved" }, 400);
+ const afterCrud = await fetch(base + "/api/workspace").then(r => r.json());
+ assert.equal(afterCrud.interactions.filter(i => i.prospect_id === prospectId).length, 2);
+ assert.ok(!afterCrud.profiles.some(p => p.id === profile.id || p.id === manualProfile.id));
+ assert.ok(!afterCrud.strategies.some(s => s.id === manualStrategy.id));
+ assert.equal(afterCrud.strategies.find(s => s.id === strategy.id).profile_id, null);
  await action({ action: "delete_prospect", id: prospectId }, 400);
  const response = await fetch(base + "/api/actions", { method: "POST", headers: { "Content-Type": "application/json", Origin: "https://untrusted.example" }, body: JSON.stringify({ action: "delete_prospect", id: prospectId, confirm: true }) });
  assert.equal(response.status, 403);
- console.log("PASS: persisted prospect → two notes → reviewed profile (70%) → strategy (66.5%) → Negotiating, audit, status suggestions, protected edits, prerequisites, delete confirmation and origin checks.");
+ console.log("PASS: persisted prospect → two notes → reviewed profile (70%) → strategy (66.5%) → Negotiating; manual entry and individual CRUD, source deletion approval guard, audit, status suggestions, protected edits, prerequisites, delete confirmation and origin checks.");
 } finally {
  if (prospectId) {
   await action({ action: "delete_prospect", id: prospectId, confirm: true });

@@ -42,10 +42,27 @@ const date = (value: string) => new Date(value).toLocaleString("en-MY", { timeZo
 const confidence = (value: number) => Math.round(Number(value) * 100) + "%";
 const lines = (value: unknown) => Array.isArray(value) ? value.join("\n") : String(value ?? "");
 const score = (p: Prospect, data: Workspace) => prospectScore(p, data.profiles);
+const modalOpeners = new WeakMap<HTMLDialogElement, HTMLElement | null>();
+function modalOpener() {
+ if (typeof document === "undefined") return null;
+ const active = document.activeElement as HTMLElement | null;
+ const parentDialog = active?.closest("dialog");
+ return parentDialog ? modalOpeners.get(parentDialog) ?? active : active;
+}
 
 function Modal({ title, children, close, busy }: { title: string; children: React.ReactNode; close: () => void; busy: boolean }) {
  const ref = useRef<HTMLDialogElement>(null);
- useEffect(() => { ref.current?.showModal(); }, []);
+ const opener = useRef<HTMLElement | null>(modalOpener());
+ useEffect(() => {
+  const dialog = ref.current;
+  const previous = opener.current;
+  if (dialog) modalOpeners.set(dialog, previous);
+  dialog?.showModal();
+  return () => {
+   dialog?.close();
+   if (previous?.isConnected && previous.getClientRects().length && !document.querySelector("dialog[open]")) previous.focus();
+  };
+ }, []);
  return <dialog ref={ref} onCancel={e => { e.preventDefault(); if (!busy) close(); }} aria-label={title} className="modal">
   <header><div><span className="eyebrow">AIRA WORKSPACE</span><h2>{title}</h2></div><button className="icon-button" aria-label="Close dialog" disabled={busy} onClick={close}>×</button></header>
   {children}
@@ -191,7 +208,7 @@ export default function WorkspaceApp() {
   <div className="main">
    <header className="topbar"><div><button ref={navigationTrigger} className="mobile-menu icon-button" aria-label="Open navigation" aria-controls="mobile-navigation" aria-expanded={mobileNav} onClick={() => setMobileNav(!mobileNav)}>☰</button><span className="breadcrumb">Workspace <span>/</span> {section}{prospect ? " / " + prospect.name : ""}</span></div><div className="account-controls"><span className="demo-indicator"><i/>{data?.user ? "Private workspace" : "Demo mode · sample data only"}</span>{data?.user ? <button className="account-button" disabled={busy} onClick={()=>authenticate("logout")}>Sign out</button> : <button className="account-button" disabled={busy} onClick={()=>{setError("");setAuthMode("login");}}>Sign in</button>}</div></header>
    <main className="content">
-    {data && <TeamPanel data={data} refresh={async()=>{setSelected(null);setQuery("");setFilter("all");await load();}}/>}
+    {data && <TeamPanel key={`${data.user?.id ?? "demo"}:${data.activeTeamId ?? "demo"}`} data={data} refresh={async()=>{setSelected(null);setQuery("");setFilter("all");await load();}}/>}
     <div className="page-heading"><div><span className="eyebrow">{prospect ? "PROSPECT WORKSPACE" : "RELATIONSHIPS, WITH CONTEXT"}</span><h1>{prospect?.name ?? section}</h1><p>{prospect ? "Turn observations into a thoughtful next conversation." : section === "Prospects" ? "Every great conversation starts with understanding." : "Your " + section.toLowerCase() + ", connected to each prospect."}</p></div><button className="primary" disabled={busy || !data} onClick={() => openEditor({ kind: "prospect" })}><span>＋</span> New Prospect</button></div>
     {notice && <div className="notice" role="status">{notice}<button aria-label="Dismiss message" onClick={() => setNotice("")}>×</button></div>}
     {error && !editor && !authMode && <div className="error" role="alert">{error}</div>}
@@ -225,7 +242,7 @@ export default function WorkspaceApp() {
    </main><footer className="footer">AIRA Residence · Consultant workspace<span>{data?.user ? "Private records" : "Demo data only"} · Kuala Lumpur time</span></footer>
   </div>
   {editor && <Modal title={(editor.id ? "Edit " : "New ") + label(editor.kind)} close={()=>setEditor(null)} busy={busy}><form onSubmit={submit}><div className="form-grid">{fields.map(f=><label className={"field " + (f.multiline ? "full" : "")} key={f.name}>{f.label}{f.options ? <select name={f.name} defaultValue={String(formValues[f.name] ?? f.options[0])}>{f.options.map(o=><option key={o} value={o}>{label(o)}</option>)}</select> : f.multiline ? <textarea name={f.name} required={f.required} maxLength={5000} rows={3} defaultValue={lines(formValues[f.name])} placeholder={f.placeholder}/> : <input name={f.name} required={f.required} maxLength={f.name === "name" ? 120 : 5000} defaultValue={lines(formValues[f.name])} placeholder={f.placeholder}/>}</label>)}</div>{editor.kind === "profile" && <p className="small muted">Manual profiles record 0% confidence until evidence-based generation. Editing returns the record to unreviewed.</p>}{error && <p className="error" role="alert">{error}</p>}<div className="modal-actions"><button type="button" className="secondary" disabled={busy} onClick={()=>setEditor(null)}>Cancel</button><button type="submit" className="primary" disabled={busy}>{busy ? "Saving…" : "Save " + editor.kind}</button></div></form></Modal>}
-  {authMode && <Modal title={authMode === "login" ? "Private consultant workspace" : "Create consultant account"} close={()=>setAuthMode(null)} busy={busy}><p className="confirm-description">Sign in before entering real prospect information. Your records are private to your account; the public demo stays separate.</p><form onSubmit={event=>{event.preventDefault(); authenticate(authMode,Object.fromEntries(new FormData(event.currentTarget)));}}><div className="form-grid auth-fields"><label className="field full">Email<input name="email" type="email" autoComplete="email" required maxLength={254}/></label><label className="field full">Password<input name="password" type="password" autoComplete={authMode === "login" ? "current-password" : "new-password"} minLength={8} maxLength={128} required/></label></div>{error && <p className="error" role="alert">{error}</p>}<div className="modal-actions"><button className="text-button" type="button" disabled={busy} onClick={()=>{setError("");setAuthMode(authMode === "login" ? "signup" : "login");}}>{authMode === "login" ? "Create an account" : "I already have an account"}</button><button className="primary" disabled={busy}>{busy ? "Working…" : authMode === "login" ? "Sign in" : "Create account"}</button></div></form></Modal>}
+  {authMode && <Modal title={authMode === "login" ? "Private consultant workspace" : "Create consultant account"} close={()=>setAuthMode(null)} busy={busy}><p className="confirm-description">Sign in before entering real prospect information. Your personal workspace stays separate from the demo. In teams, consultants see assigned leads and owners/admins see the team pipeline.</p><form onSubmit={event=>{event.preventDefault(); authenticate(authMode,Object.fromEntries(new FormData(event.currentTarget)));}}><div className="form-grid auth-fields"><label className="field full">Email<input name="email" type="email" autoComplete="email" required maxLength={254}/></label><label className="field full">Password<input name="password" type="password" autoComplete={authMode === "login" ? "current-password" : "new-password"} minLength={8} maxLength={128} required/></label></div>{error && <p className="error" role="alert">{error}</p>}<div className="modal-actions"><button className="text-button" type="button" disabled={busy} onClick={()=>{setError("");setAuthMode(authMode === "login" ? "signup" : "login");}}>{authMode === "login" ? "Create an account" : "I already have an account"}</button><button className="primary" disabled={busy}>{busy ? "Working…" : authMode === "login" ? "Sign in" : "Create account"}</button></div></form></Modal>}
   {confirm && <Modal title={confirm.title} close={()=>setConfirm(null)} busy={busy}><p className="confirm-description">{confirm.description}</p>{error && <p className="error" role="alert">{error}</p>}<div className="modal-actions"><button className="secondary" disabled={busy} onClick={()=>setConfirm(null)}>Cancel</button><button className={confirm.title.startsWith("Delete") ? "danger" : "primary"} disabled={busy} onClick={async()=>{ try { await confirm.run(); setConfirm(null); } catch {} }}>{busy ? "Working…" : confirm.title.startsWith("Delete") ? "Delete permanently" : confirm.title.startsWith("Apply") ? "Apply status" : "Continue editing"}</button></div></Modal>}
  </div>;
 }

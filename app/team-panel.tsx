@@ -12,6 +12,7 @@ export default function TeamPanel({ data, refresh }: { data: Workspace; refresh:
  const team = data.teams.find(t => t.id === data.activeTeamId);
  const manager = team?.role === "owner" || team?.role === "admin";
  async function run(payload: Record<string, unknown>, message: string) {
+  if (busy) return false;
   setBusy(true); setError(""); setNotice("");
   try {
    const response = await fetch("/api/teams", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
@@ -38,7 +39,7 @@ export default function TeamPanel({ data, refresh }: { data: Workspace; refresh:
     {code && <div className={styles.invite}><strong>Single-use invitation · expires in 7 days</strong><label>Copy and share this code<input readOnly value={code} onFocus={e => e.currentTarget.select()} /></label><p>The code is shown only now. Share it with the intended teammate.</p></div>}
    </>}
    <div><h3>Current members</h3>{data.members.map(member => <div className={styles.member} key={member.user_id}><div><strong>{member.display_name || member.user_id}</strong><small>{member.role}</small></div>{manager && member.role !== "owner" && member.user_id !== data.user?.id && (team?.role === "owner" || member.role === "member") && <form onSubmit={e => { e.preventDefault(); const values = Object.fromEntries(new FormData(e.currentTarget)); void run({ action: "update_member", user_id: member.user_id, ...values }, "Member role updated."); }}>{team?.role === "owner" && <><label>Access<select name="role" defaultValue={member.role}><option value="member">Consultant</option><option value="admin">Admin</option></select></label><button disabled={busy}>Save role</button></>}<button type="button" disabled={busy} onClick={() => { if (window.confirm("Remove this member’s access to this team? Reassign their leads first.")) void run({ action: "remove_member", user_id: member.user_id, confirm: true }, "Member removed."); }}>Remove</button></form>}</div>)}</div>
-   {manager && <div><h3>Invitations</h3>{data.invites.length ? data.invites.map(invite => <div className={styles.member} key={invite.id}><span>{invite.role} · {invite.used_at ? "Used" : invite.revoked_at ? "Revoked" : new Date(invite.expires_at) < new Date() ? "Expired" : "Pending"}</span>{!invite.used_at && !invite.revoked_at && <button disabled={busy} onClick={() => void run({ action: "revoke_invite", id: invite.id }, "Invitation revoked.")}>Revoke</button>}</div>) : <p>No invitations yet.</p>}</div>}
+   {manager && <div><h3>Invitations</h3>{data.invites.length ? data.invites.map(invite => <div className={styles.member} key={invite.id}><span>{invite.role} · {invite.used_at ? "Used" : invite.revoked_at ? "Revoked" : new Date(invite.expires_at) < new Date() ? "Expired" : "Pending"}</span>{!invite.used_at && !invite.revoked_at && (team?.role === "owner" || invite.role === "member") && <button disabled={busy} onClick={() => void run({ action: "revoke_invite", id: invite.id }, "Invitation revoked.")}>Revoke</button>}</div>) : <p>No invitations yet.</p>}</div>}
   </div></details>
   {error && <p role="alert">{error}</p>}{notice && <p role="status">{notice}</p>}
  </section>;

@@ -8,9 +8,9 @@ The core engine was included in Sprint 1, as required by AGENTS.md. Sprint 2 com
 
 ## Database
 
-The provisioned project had no core tables. The original 0001 migration contains literal escaped text and remains unchanged. Executable migrations 0002–0007 create the documented schema, fictional seed data, indexes, append-only transactional audit triggers, the named status tool, strategy approval enforcement and private workspaces. These changes were applied through the Supabase SQL editor and verified through the application's anonymous key.
+The provisioned project had no core tables. The original 0001 migration contains literal escaped text and remains unchanged. Executable migrations 0002–0009 create the documented schema, fictional seed data, indexes, append-only transactional audit triggers, the named status tool, strategy approval enforcement and private/team workspaces. These changes were applied through the Supabase SQL editor and verified through the application's anonymous key and authenticated SQL principals.
 
-Anonymous users may only read/write ownerless demo rows. Signed-in consultants may read/write their own rows. The trusted app_metadata role management can read all records. Child writes must match their parent owner. Audit records cannot be inserted, edited or deleted by public clients. Suggestions validate ownership independently of RLS because their database function logs under a privileged trigger-like context.
+Anonymous users may only read/write ownerless demo rows. Signed-in consultants see only assigned leads in their teams; team owners/admins see their team's full pipeline. Child writes must match their parent creator and team. Audit records cannot be inserted, edited or deleted by public clients. Suggestions validate access independently of RLS because their database function logs under a privileged trigger-like context.
 
 ## Verification
 
@@ -38,3 +38,11 @@ The existing public core API scenario still passes after tenancy: prospect, two 
 Mobile prospect cards replace the desktop table below 1200px. Phone navigation uses a dismissible modal drawer, controls have 44px targets and inputs use 16px text. Browser checks at 320, 375, 390, 430 and 768px show cards and no horizontal overflow; the phone detail and prospect form remain usable. Physical phone keyboard behavior has not been tested.
 
 Two interactive fictional design concepts, Concierge and Team Operations, are available at /design/aira-workspace.html, each with desktop and phone layouts. They are explicitly local mockups; their forms never write production data.
+
+## Quality control follow-up
+
+Three reviewers checked tenant/security integrity, the core workflow, and mobile/accessibility. Migration 0009 is applied: substantive content or provenance changes to approved profiles/strategies reset approval even through direct database writes, and strategies without a source profile cannot receive new approval. A removed source leaves a historical unreviewed strategy.
+
+Budget priority now parses MYR/RM numbers, magnitude suffixes and conservative range bounds, preventing the M in MYR from being mistaken for millions. Dialogs restore focus to their opener; invitation controls match admin permissions; TeamPanel state resets between accounts/teams. Desktop mockup overflow is contained within its preview, and mockup navigation restores keyboard focus.
+
+QC covers ten unit tests, production build with type/lint validation, database review-integrity and team-assignment rollback suites, and an expanded core API script exercising manual profile/strategy entry, individual note/profile/strategy edit/delete, orphan-source approval denial and the original PRD scenario. Browser checks cover mobile widths, drawer keyboard behavior, forms and modal focus restoration. Full two-account browser invitation flow, physical phone keyboard and a live AI provider remain outside verified coverage.
