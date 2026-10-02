@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { ZodError } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { getProspect, saveProspect, deleteProspect } from "@/lib/data/prospects";
+import { saveInteraction, deleteInteraction } from "@/lib/data/interactions";
 import { generate_profile, generate_strategy, suggest_status } from "@/lib/actions/generation";
 import { idSchema, prospectSchema, interactionSchema, profileSchema, strategySchema, reviewSchema } from "@/lib/validation";
 export const maxDuration = 60;
@@ -29,17 +30,11 @@ export async function POST(request: NextRequest) {
         const values = interactionSchema.parse(body.values);
         const prospect = await getProspect(values.prospect_id);
         const id = body.id ? idSchema.parse(body.id) : undefined;
-        if (id) {
-          const { data: original } = await db.from("interactions").select("prospect_id").eq("id", id).single();
-          if (original?.prospect_id !== values.prospect_id) throw new Error("Interaction does not belong to this prospect.");
-        }
-        const query = id ? db.from("interactions").update(values).eq("id", id) : db.from("interactions").insert({ ...values, user_id: prospect.user_id });
-        const { data, error } = await query.select().single(); if (error) throw error; result = data; break;
+        result = await saveInteraction({ ...values, user_id: prospect.user_id }, id); break;
       }
       case "delete_interaction": {
         if (body.confirm !== true) throw new Error("Confirm deletion first.");
-        const { data, error } = await db.from("interactions").delete().eq("id", idSchema.parse(body.id)).select("id");
-        if (error) throw error; if (!data?.length) throw new Error("Interaction not found."); break;
+        await deleteInteraction(idSchema.parse(body.id)); break;
       }
       case "generate_profile": result = await generate_profile(idSchema.parse(body.id)); break;
       case "generate_strategy": result = await generate_strategy(idSchema.parse(body.id)); break;
