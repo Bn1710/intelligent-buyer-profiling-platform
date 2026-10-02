@@ -1,17 +1,17 @@
-import { createClient } from "@/lib/supabase/server";
-import { listProspects } from "./prospects";
+import { teamContext } from "./teams";
 import type { Workspace } from "@/lib/types";
 export async function loadWorkspace(): Promise<Workspace> {
-  const db = await createClient();
-  const { data: { user } } = await db.auth.getUser();
-  const [prospects, interactions, profiles, strategies, audit] = await Promise.all([
-    listProspects(),
-    db.from("interactions").select("*").order("created_at", { ascending: false }),
-    db.from("prospect_profiles").select("*").order("created_at", { ascending: false }),
-    db.from("strategies").select("*").order("created_at", { ascending: false }),
-    db.from("audit_logs").select("*").order("created_at", { ascending: false }).limit(100),
+  const { db,user,teams,activeTeamId } = await teamContext();
+  const scope = (table: string) => {
+    const q = db.from(table).select("*");
+    return (activeTeamId ? q.eq("tenant_id",activeTeamId) : q.is("tenant_id",null)).order("created_at", { ascending: false });
+  };
+  const manager = teams.find(t => t.id === activeTeamId)?.role;
+  const [prospects,interactions,profiles,strategies,audit,members,invites] = await Promise.all([
+    scope("prospects"),scope("interactions"),scope("prospect_profiles"),scope("strategies"),scope("audit_logs").limit(100),
+    activeTeamId ? db.from("team_members").select("*").eq("team_id",activeTeamId).order("created_at") : Promise.resolve({data:[],error:null}),
+    activeTeamId && (manager === "owner" || manager === "admin") ? db.from("team_invites").select("id,team_id,role,created_by,expires_at,used_at,revoked_at,created_at").eq("team_id",activeTeamId).order("created_at",{ascending:false}).limit(30) : Promise.resolve({data:[],error:null}),
   ]);
-  for (const result of [interactions, profiles, strategies, audit]) if (result.error) throw new Error(result.error.message);
-  return { prospects, interactions: interactions.data ?? [], profiles: profiles.data ?? [], strategies: strategies.data ?? [], audit: audit.data ?? [], aiEnabled: !!process.env.OPENAI_API_KEY, user: user ? { id: user.id, email: user.email ?? "Consultant", role: user.app_metadata?.role ?? "consultant" } : null };
+  for (const r of [prospects,interactions,profiles,strategies,audit,members,invites]) if(r.error) throw new Error(r.error.message);
+  return { prospects:prospects.data ?? [],interactions:interactions.data ?? [],profiles:profiles.data ?? [],strategies:strategies.data ?? [],audit:audit.data ?? [],teams,activeTeamId,members:members.data ?? [],invites:invites.data ?? [],aiEnabled:!!process.env.OPENAI_API_KEY,user:user ? { id:user.id,email:user.email ?? "Consultant",role:manager ?? "consultant" } : null };
 }
-

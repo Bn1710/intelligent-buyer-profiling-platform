@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { ZodError } from "zod";
-import { createClient } from "@/lib/supabase/server";
+import { teamContext } from "@/lib/data/teams";
 import { getProspect, saveProspect, deleteProspect } from "@/lib/data/prospects";
 import { saveInteraction, deleteInteraction } from "@/lib/data/interactions";
 import { generate_profile, generate_strategy, suggest_status } from "@/lib/actions/generation";
@@ -12,13 +12,12 @@ export async function POST(request: NextRequest) {
   if (origin && origin !== new URL(request.url).origin && origin !== "https://" + request.headers.get("host")) return NextResponse.json({ error: "Invalid request origin." }, { status: 403 });
   try {
     const body = await request.json();
-    const db = await createClient();
+    const { db, user, activeTeamId } = await teamContext();
     let result: unknown;
     switch (body.action) {
       case "save_prospect": {
         const id = body.id ? idSchema.parse(body.id) : undefined;
         const values = prospectSchema.parse(body.values);
-        const { data: { user } } = await db.auth.getUser();
         result = await saveProspect({ ...values, ...(!id ? { user_id: user?.id ?? null } : {}) }, id);
         break;
       }
@@ -60,13 +59,17 @@ export async function POST(request: NextRequest) {
       }
       case "review_profile":
       case "review_strategy": {
-        const { data, error } = await db.from(body.action === "review_profile" ? "prospect_profiles" : "strategies").update({ review_status: reviewSchema.parse(body.review_status) }).eq("id", idSchema.parse(body.id)).select().single();
+        let query = db.from(body.action === "review_profile" ? "prospect_profiles" : "strategies").update({ review_status: reviewSchema.parse(body.review_status) }).eq("id", idSchema.parse(body.id));
+        query = activeTeamId ? query.eq("tenant_id", activeTeamId) : query.is("tenant_id", null);
+        const { data, error } = await query.select().single();
         if (error) throw error; result = data; break;
       }
       case "delete_profile":
       case "delete_strategy": {
         if (body.confirm !== true) throw new Error("Confirm deletion first.");
-        const { data, error } = await db.from(body.action === "delete_profile" ? "prospect_profiles" : "strategies").delete().eq("id", idSchema.parse(body.id)).select("id");
+        let query = db.from(body.action === "delete_profile" ? "prospect_profiles" : "strategies").delete().eq("id", idSchema.parse(body.id));
+        query = activeTeamId ? query.eq("tenant_id", activeTeamId) : query.is("tenant_id", null);
+        const { data, error } = await query.select("id");
         if (error) throw error; if (!data?.length) throw new Error("Record not found."); break;
       }
       default: return NextResponse.json({ error: "Unknown action." }, { status: 400 });
@@ -77,4 +80,3 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: message }, { status: 400 });
   }
 }
-

@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
+import { cookies } from "next/headers";
+import { TEAM_COOKIE } from "@/lib/data/teams";
 import { createClient } from "@/lib/supabase/server";
 const credentials = z.object({ email: z.string().email().max(254), password: z.string().min(8,"Use at least 8 characters.").max(128) });
 export async function POST(request: NextRequest) {
@@ -10,6 +12,7 @@ export async function POST(request: NextRequest) {
   const db = await createClient();
   if (body.action === "logout") {
    const { error } = await db.auth.signOut(); if (error) throw new Error(error.message);
+   (await cookies()).delete(TEAM_COOKIE);
    return NextResponse.json({ message:"Returned to the public demo." });
   }
   const values = credentials.parse(body);
@@ -26,4 +29,3 @@ export async function POST(request: NextRequest) {
   return NextResponse.json({ error:"Unknown authentication action." },{ status:400 });
  } catch(error) { return NextResponse.json({ error:error instanceof z.ZodError ? error.issues.map(i=>i.message).join(" ") : error instanceof Error ? error.message : "Authentication unavailable. Please retry." },{ status:400 }); }
 }
-
