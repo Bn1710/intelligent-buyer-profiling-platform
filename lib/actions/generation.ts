@@ -26,9 +26,9 @@ export async function generate_strategy(prospectId: string) {
 }
 export async function suggest_status(prospectId: string) {
   await getProspect(prospectId);
-  const notes = await getInteractions(prospectId);
-  if (!notes.length) throw new Error("Log an interaction first.");
-  const latest = notes[notes.length - 1];
-  return { status: latest.mood_after === "positive" ? "engaged" : "new", explanation: "Based only on the latest recorded mood (" + latest.mood_after + "). Review before applying." };
+  const db = await createClient();
+  const { data, error } = await db.rpc("suggest_status", { p_id: prospectId });
+  if (error) throw new Error(error.message);
+  return data;
 }
 
