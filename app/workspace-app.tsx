@@ -150,7 +150,7 @@ export default function WorkspaceApp() {
  const filtered = data?.prospects.filter(p => (!query || [p.name,p.contact_info,p.budget_range,p.cultural_background].join(" ").toLowerCase().includes(query.toLowerCase())) && (filter === "all" || p.status === filter)).sort((a,b) => score(b,data) - score(a,data) || b.created_at.localeCompare(a.created_at)) ?? [];
  return <div className="app-shell">
   <aside className={"sidebar " + (mobileNav ? "sidebar-open" : "")}>
-   <Link className="brand" href="/" aria-label="AIRA home"><span className="brand-mark">A</span><span>AIRA<span className="brand-sub">RESIDENCE · KL</span></span></Link>
+   <Link className="brand" href="/" aria-label="AIRA home" onClick={()=>{setSection("Prospects");setSelected(null);setMobileNav(false);}}><span className="brand-mark">A</span><span>AIRA<span className="brand-sub">RESIDENCE · KL</span></span></Link>
    <div className="workspace-label">CONSULTANT WORKSPACE</div>
    <nav aria-label="Main navigation">{(["Prospects","Interactions","Profiles","Strategies"] as Section[]).map((item,i) => <button key={item} className={section === item ? "nav-item active" : "nav-item"} onClick={() => { setSection(item); setSelected(null); setMobileNav(false); }}><span className="nav-icon">{["◈","◷","◇","↗"][i]}</span>{item}<span className="nav-count">{data ? [data.prospects.length,data.interactions.length,data.profiles.length,data.strategies.length][i] : "—"}</span></button>)}</nav>
    <div className="sidebar-note"><span className="eyebrow">A MORE PERSONAL APPROACH</span><p>Understand the person.<br/>Shape the conversation.</p><span className="small">Built around your observations.</span></div>
