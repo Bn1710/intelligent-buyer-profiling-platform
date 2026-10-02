@@ -5,6 +5,8 @@ import { getProspect, saveProspect, deleteProspect } from "@/lib/data/prospects"
 import { saveInteraction, deleteInteraction } from "@/lib/data/interactions";
 import { generate_profile, generate_strategy, suggest_status } from "@/lib/actions/generation";
 import { idSchema, prospectSchema, interactionSchema, profileSchema, strategySchema, reviewSchema } from "@/lib/validation";
+import { sourceSchema } from "@/lib/research";
+import { researchForProfile } from "@/lib/data/research";
 export const maxDuration = 60;
 export async function POST(request: NextRequest) {
   // Mutations must originate from this application, including cookie-authenticated requests.
@@ -15,6 +17,18 @@ export async function POST(request: NextRequest) {
     const { db, user, activeTeamId } = await teamContext();
     let result: unknown;
     switch (body.action) {
+      case "save_source": {
+        const values = sourceSchema.parse(body.values); const prospect = await getProspect(values.prospect_id);
+        const id = body.id ? idSchema.parse(body.id) : undefined;
+        const query = id ? db.from("prospect_sources").update(values).eq("id",id).eq("prospect_id",prospect.id) : db.from("prospect_sources").insert({...values,user_id:prospect.user_id});
+        const {data,error}=await query.select().single(); if(error)throw new Error(error.message);result=data;break;
+      }
+      case "delete_source": {
+        if(body.confirm!==true)throw new Error("Confirm deletion first.");
+        const prospect=await getProspect(idSchema.parse(body.prospect_id));
+        const {data,error}=await db.from("prospect_sources").delete().eq("id",idSchema.parse(body.id)).eq("prospect_id",prospect.id).select("id");
+        if(error)throw new Error(error.message);if(!data?.length)throw new Error("Source not found.");break;
+      }
       case "save_prospect": {
         const id = body.id ? idSchema.parse(body.id) : undefined;
         const values = prospectSchema.parse(body.values);
@@ -54,7 +68,8 @@ export async function POST(request: NextRequest) {
           const { data: approved } = await db.from("prospect_profiles").select("id").eq("prospect_id", prospect.id).eq("review_status", "approved").order("created_at", { ascending: false }).limit(1).maybeSingle();
           if (!approved) throw new Error("Approve a profile first."); profileId = approved.id;
         }
-        const query = id ? db.from(table).update({ ...values, review_status: "unreviewed", source: "consultant-edited" }).eq("id", id) : db.from(table).insert({ ...values, prospect_id: prospect.id, user_id: prospect.user_id, source: "consultant-manual", confidence: 0, review_status: "unreviewed", ...(!profile ? { profile_id: profileId } : {}) });
+        const researchValues = profile ? {research_sources:await researchForProfile(prospect.id),research_claims:[]} : {};
+        const query = id ? db.from(table).update({ ...values, ...researchValues, review_status: "unreviewed", source: "consultant-edited" }).eq("id", id) : db.from(table).insert({ ...values, ...researchValues, prospect_id: prospect.id, user_id: prospect.user_id, source: "consultant-manual", confidence: 0, review_status: "unreviewed", ...(!profile ? { profile_id: profileId } : {}) });
         const { data, error } = await query.select().single(); if (error) throw error; result = data; break;
       }
       case "review_profile":
