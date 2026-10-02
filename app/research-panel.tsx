@@ -1,5 +1,5 @@
 "use client";
-import { useState, useRef, useEffect, type FormEvent } from "react";
+import { useState, useRef, useEffect, useId, type FormEvent } from "react";
 import type { Prospect, ProspectSource, Profile } from "@/lib/types";
 import { researchIsCurrent } from "@/lib/research";
 import styles from "./research-panel.module.css";
@@ -8,6 +8,7 @@ export default function ResearchPanel({prospect,sources,busy,command,confirm}:{p
  const [name,setName]=useState(prospect.name); const [company,setCompany]=useState("");const [location,setLocation]=useState("");
  const [editing,setEditing]=useState<ProspectSource|null|undefined>(); const [verification,setVerification]=useState("unverified");
  const [formError,setFormError]=useState("");
+ const [discoveryOpen,setDiscoveryOpen]=useState(false);const discoveryId=useId();
  const opener=useRef<HTMLElement|null>(null);
  useEffect(()=>{if(editing===undefined && opener.current?.isConnected){opener.current.focus();opener.current=null;}},[editing]);
  const query=[name.trim() ? '"'+name.trim()+'"' : "",company.trim(),location.trim()].filter(Boolean).join(" ");
@@ -22,9 +23,9 @@ export default function ResearchPanel({prospect,sources,busy,command,confirm}:{p
  return <section className={"panel "+styles.panel} aria-label="Research and sources">
   <div className="panel-heading"><div><span className="eyebrow">RESEARCH & SOURCES</span><h2>Context you can trace <span className="muted">({sources.length})</span></h2></div><button className="secondary" disabled={busy} onClick={()=>edit()}>＋ Add source</button></div>
   <p>Save relevant public professional information, confirm the person, then choose what may inform a profile. Search results are possible matches, not verified evidence.</p>
-  <details className={styles.discovery}><summary>Find public information</summary><div className={styles.searchFields}><label>Name to search<input value={name} onChange={e=>setName(e.target.value)} maxLength={120}/></label><label>Company or organisation<input value={company} onChange={e=>setCompany(e.target.value)} maxLength={120} placeholder="Optional identity clue"/></label><label>Location<input value={location} onChange={e=>setLocation(e.target.value)} maxLength={120} placeholder="e.g. Kuala Lumpur"/></label></div>
+  <div className={styles.discovery}><button type="button" className={"secondary "+styles.discoveryButton} aria-expanded={discoveryOpen} aria-controls={discoveryId} onClick={()=>setDiscoveryOpen(open=>!open)}>Find public information <span aria-hidden="true">{discoveryOpen ? "−" : "+"}</span></button><div id={discoveryId} hidden={!discoveryOpen} className={styles.discoveryContent}><div className={styles.searchFields}><label>Name to search<input value={name} onChange={e=>setName(e.target.value)} maxLength={120}/></label><label>Company or organisation<input value={company} onChange={e=>setCompany(e.target.value)} maxLength={120} placeholder="Optional identity clue"/></label><label>Location<input value={location} onChange={e=>setLocation(e.target.value)} maxLength={120} placeholder="e.g. Kuala Lumpur"/></label></div>
    <div className={styles.links}>{query ? <><a href={"https://www.google.com/search?q="+encodeURIComponent(query)} target="_blank" rel="noopener noreferrer">Public web ↗</a><a href={"https://www.google.com/search?q="+encodeURIComponent(query+" interview biography company")+"&tbm=nws"} target="_blank" rel="noopener noreferrer">News & interviews ↗</a><a href={"https://www.bing.com/search?q="+encodeURIComponent(query+" site:linkedin.com/in/")} target="_blank" rel="noopener noreferrer">Professional profiles ↗</a></> : <p>Enter a name to create search links.</p>}</div><p className="small muted">These links open external search results. This app does not scrape pages or claim to find every available source. Copy a useful link and a short excerpt into Add source.</p>
-  </details>
+  </div></div>
   {editing !== undefined && <form key={editing?.id ?? "new"} className={styles.editor} onSubmit={submit} aria-label={editing ? "Edit research source" : "Add research source"}>
    <h3>{editing ? "Edit source" : "Add a source"}</h3>
    <label>Public HTTPS link<input name="url" type="url" required maxLength={2048} defaultValue={editing?.url} placeholder="https://company.example/bio" autoFocus/></label>
